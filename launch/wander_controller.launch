@@ -1,0 +1,51 @@
+<launch>
+
+    <arg name="xbot" default="false" />
+    <arg name="input_mode" default="sensor" />
+
+    <arg name="namespace" default="wander"/>
+    <arg name="connected_to" default="world"/>
+    <arg name="x_init_pose" default="0"/>
+    <arg name="y_init_pose" default="0"/>
+    <arg name="z_init_pose" default="0"/>
+    <arg name="roll_init_pose" default="0"/>
+    <arg name="pitch_init_pose" default="0"/>
+    <arg name="yaw_init_pose" default="0"/>
+
+    <!-- Set mounting position -->
+    <arg name="xyz" value="'$(arg x_init_pose) $(arg y_init_pose) $(arg z_init_pose)'"/>
+    <arg name="rpy" value="'$(arg roll_init_pose) $(arg pitch_init_pose) $(arg yaw_init_pose)'"/>
+
+    <arg name="xacro_robot" default="$(find hrii_assistive_robot_description)/robots/assistive_robot_U_wander.urdf.xacro"/>
+    
+    <!-- Load Robot description -->
+    <param name="robot_description" command="$(find xacro)/xacro $(arg xacro_robot)
+                                            namespace:=$(arg namespace)
+                                            gazebo_ros_control:=false
+                                            connected_to:=$(arg connected_to)
+                                            xyz:=$(arg xyz)
+                                            rpy:=$(arg rpy)"/>
+
+    <!-- Robot state and joint state publishers -->
+<!--     <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" output="screen"/> -->
+
+    <!-- <node pkg="kyon_controller" type="controller" name="kyon_controller_node" output="screen"> -->
+        <!-- <remap if="$(arg xbot)" from="/robot_description" to="/xbotcore/robot_description"/> -->
+        <!-- <remap if="$(arg xbot)" from="/robot_description_semantic" to="/xbotcore/robot_description_semantic"/> -->
+        <!-- <param name="config" textfile="$(find concert_horizon)/config/concert_controller_config.yaml"/> -->
+        <!-- <param name="rate" value="1000"/> -->
+    <!-- </node> -->
+
+    <node pkg="joy" type="joy_node" name="joy_node" if="$(eval arg('input_mode') == 'joystick')">
+        <param name="autorepeat_rate" value="20"/>
+    </node>
+
+    <node pkg="wander_horizon" type="receding_horizon.py" name="mpc_node" output="screen">
+        <!-- <remap if="$(arg xbot)" from="/robot_description" to="/xbotcore/robot_description"/> -->
+        <!-- <remap if="$(arg xbot)" from="/robot_description_semantic" to="/xbotcore/robot_description_semantic"/> -->
+        <param name="input_mode" value="$(arg input_mode)" /> <!-- sensor joystick -->
+<!--         <rosparam param="config" file="$(find horizon_navigation)/config/obstacle_generator_config.yaml" ns="concert_obstacles"/> -->
+<!--         <param name="config" textfile="$(find horizon_navigation)/config/obstacle_generator_config.yaml"/> -->
+    </node>
+
+</launch>
