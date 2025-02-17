@@ -13,22 +13,15 @@ from scipy.spatial.transform import Rotation
 from force_joystick import ForceJoystick
 from joy_commands import JoyForce
 
-from modes import OperationMode
-
-
 class VirtualMassHandler:
-    def __init__(self, kin_dyn, initial_solution, ti: taskInterface, input_mode='sensor'):
+    def __init__(self, kin_dyn, initial_solution, ti: taskInterface, input_mode='joystick'):
 
         self.kin_dyn = kin_dyn
 
         self.dt = ti.prb.getDt()
         self.ns = ti.prb.getNNodes()
 
-        self.__base_yaw_control_flag = True
-
-        # m_virtual = np.array([50, 50])
-        # k_virtual = np.array([50, 50])
-        # d_virtual = np.array([20, 20])
+        self.__base_yaw_control_flag = False
 
         # expose this outside
         self.m_virtual = np.array([50, 50, 50]) # 80 80 80 slow but good
@@ -42,7 +35,8 @@ class VirtualMassHandler:
 
         self.force_sensed = None
 
-        self.ee_name = 'ee_E'
+        self.ee_name = 'wander_ft_sensor_link'
+        self.__base_link = 'wander_base_link'
 
         self.virtual_mass_controller = self.__init_virtual_mass_controller()
         self.sys_dim = self.virtual_mass_controller.getDimension()
@@ -51,14 +45,10 @@ class VirtualMassHandler:
         self.ee_task_name = 'ee_force'
         self.ee_task = ti.getTask(self.ee_task_name)
 
-        ## posture task
-        self.posture_arm_name = 'posture_arm'
-        self.posture_arm_task = ti.getTask(self.posture_arm_name)
-
-        ## required for omnisteering
-        # floating base task
-        self.posture_cart_name = "posture_base"
-        self.posture_cart_task = ti.getTask(self.posture_cart_name)
+        # ## required for omnisteering
+        # # floating base task
+        # self.posture_cart_name = "posture_base"
+        # self.posture_cart_task = ti.getTask(self.posture_cart_name)
 
         # kin fun of end effector
         self.ee_fk_pose_fun = kin_dyn.fk(self.ee_name)
@@ -80,8 +70,8 @@ class VirtualMassHandler:
             self.base_force_task = ti.getTask(self.base_force_name)
 
             # kin_dyn functions of base
-            self.base_fk_pose_fun = kin_dyn.fk('base_link')
-            self.base_fk_vel_fun = kin_dyn.frameVelocity('base_link', ti.model.kd_frame)
+            self.base_fk_pose_fun = kin_dyn.fk(self.__base_link)
+            self.base_fk_vel_fun = kin_dyn.frameVelocity(self.__base_link, ti.model.kd_frame)
 
             # get yaw angle of base
             self.base_initial_rot = self.base_fk_pose_fun(q=self.solution['q'][:, 0])['ee_rot'] # matrix
@@ -123,7 +113,6 @@ class VirtualMassHandler:
         # ===============================================
 
         self.input_mode = input_mode  # 'joystick' 'sensor'
-        self.operation_mode = OperationMode.IDLE
 
         if self.input_mode == 'joystick':
             self.__init_joystick()
@@ -140,7 +129,6 @@ class VirtualMassHandler:
         print(f'Wrench offset: {self.wrench_offset}')
 
         self.__init_publisher()
-        self.__init_services()
 
     def __init_publisher(self):
 
@@ -166,19 +154,6 @@ class VirtualMassHandler:
         self.marker_ref.color.b = 0.0
         self.marker_ref.color.a = 1.0  # Fully opaque
 
-    def __capture_homing(self, req):
-        if req.data:
-            self.ee_homing_posture = copy.copy(self.solution['q'][15:22, :])
-
-        return {'success': True}
-
-    def __init_services(self):
-
-        print('Opening services for virtual mass handler...\n')
-        # teaching mode
-        self.follow_me_mode_service = rospy.Service('/force_mpc/capture_homing/switch', SetBool, self.__capture_homing)
-
-        print("done.\n")
 
     def __init_joystick(self):
         self.jc = JoyForce()
@@ -221,126 +196,45 @@ class VirtualMassHandler:
             force_sensed_rot = force_sensed
 
         # ignore z if follow me is on
-        if self.operation_mode == OperationMode.FOLLOW_ME:
-            force_sensed_rot[2] = 0.0
-            # force_sensed_rot[2] = copy.copy(force_sensed_rot[1])
+        force_sensed_rot[2] = 0.0
+        # force_sensed_rot[2] = copy.copy(force_sensed_rot[1])
 
         # compute virtual mass displacement
-
         # with integrated state
-        if self.operation_mode == OperationMode.HYBRID:
-            # uses world coordinates
-            self.virtual_mass_controller.update(self.ee_integrated[:, 0], force_sensed_rot[:self.sys_dim])
+        # with real state
+        if self.__base_yaw_control_flag:
+
+            # get current yaw angle of the base
+            base_pose = self.base_fk_pose_fun(q=q_current)
+            base_vel = self.base_fk_vel_fun(q=q_current, qdot=qdot_current)
+
+
+            base_yaw = Rotation.from_matrix(base_pose['ee_rot']).as_euler("xyz")[2]
+            base_yaw_vel = base_vel['ee_vel_angular'].full()[2]
+
+            # cross product between force sensed (in world) and vector rotated as the base_link
+            force_sensed_rot[2] = np.cross(np.array(base_pose['ee_rot']) @ np.array([[1, 0, 0]]).T, force_sensed_rot.reshape((3, 1)), axis=0)[2]
+
+            # using xy of ee and yaw of base
+            ee_x_base_yaw = np.zeros([3, 1])
+            ee_x_base_yaw[0] = ee_pos[0][0]
+            ee_x_base_yaw[1] = ee_pos[1][0]
+            ee_x_base_yaw[2] = base_yaw
+
+            ee_x_base_yaw_vel = np.zeros([3, 1])
+            ee_x_base_yaw_vel[0] = ee_vel_lin[0][0]
+            ee_x_base_yaw_vel[1] = ee_vel_lin[1][0]
+            ee_x_base_yaw_vel[2] = base_yaw_vel
+
+            self.virtual_mass_controller.update(np.vstack([ee_x_base_yaw, ee_x_base_yaw_vel]), force_sensed_rot[:self.sys_dim])
+
         else:
-
-            # with real state
-            if self.__base_yaw_control_flag:
-
-                # get current yaw angle of the base
-                base_pose = self.base_fk_pose_fun(q=q_current)
-                base_vel = self.base_fk_vel_fun(q=q_current, qdot=qdot_current)
-
-
-                base_yaw = Rotation.from_matrix(base_pose['ee_rot']).as_euler("xyz")[2]
-                base_yaw_vel = base_vel['ee_vel_angular'].full()[2]
-
-                # cross product between force sensed (in world) and vector rotated as the base_link
-                force_sensed_rot[2] = np.cross(np.array(base_pose['ee_rot']) @ np.array([[1, 0, 0]]).T, force_sensed_rot.reshape((3, 1)), axis=0)[2]
-
-                # using xy of ee and yaw of base
-                ee_x_base_yaw = np.zeros([3, 1])
-                ee_x_base_yaw[0] = ee_pos[0][0]
-                ee_x_base_yaw[1] = ee_pos[1][0]
-                ee_x_base_yaw[2] = base_yaw
-
-                ee_x_base_yaw_vel = np.zeros([3, 1])
-                ee_x_base_yaw_vel[0] = ee_vel_lin[0][0]
-                ee_x_base_yaw_vel[1] = ee_vel_lin[1][0]
-                ee_x_base_yaw_vel[2] = base_yaw_vel
-
-                self.virtual_mass_controller.update(np.vstack([ee_x_base_yaw, ee_x_base_yaw_vel]), force_sensed_rot[:self.sys_dim])
-
-            else:
-                # using xyz of ee
-                self.virtual_mass_controller.update(np.vstack([ee_pos, ee_vel_lin]), force_sensed_rot[:self.sys_dim])
+            # using xyz of ee
+            self.virtual_mass_controller.update(np.vstack([ee_pos, ee_vel_lin]), force_sensed_rot[:self.sys_dim])
 
         self.ee_integrated = self.virtual_mass_controller.getIntegratedState()
 
         return self.ee_integrated
-
-    def setMode(self, mode):
-
-        print("setting operation mode: ", mode)
-
-        if mode == OperationMode.TEACH:
-
-            # activate ee task
-            self.ee_task.setWeight(1.)
-            # remove postural of arm
-            self.posture_arm_task.setWeight(0.0)
-
-            # only for OMNISTEERING
-            # ref = np.atleast_2d(solution['q'][:7, 0]).T
-            ref = np.array([[0, 0, 0, 0, 0, 0]]).T  # ref in velocity
-            self.posture_cart_task.setRef(ref)
-            self.posture_cart_task.setWeight(100.)
-
-            self.operation_mode = OperationMode.TEACH
-
-        elif mode == OperationMode.FOLLOW_ME:
-
-            # activate ee task
-            self.ee_task.setWeight(1.0)
-
-            if self.__base_yaw_control_flag:
-                self.base_force_task.setWeight(0.1)
-
-            # only for OMNISTEERING
-            self.posture_cart_task.setWeight(0.)
-
-            # self.posture_arm_task.setRef(self.solution['q'][7:13, :])
-            self.posture_arm_task.setRef(self.solution['q'][15:22, :])  # saving the current position of the arm
-            self.posture_arm_task.setWeight(1.0)
-            self.operation_mode = OperationMode.FOLLOW_ME
-
-        elif mode == OperationMode.HYBRID:
-
-            # activate ee task
-            self.ee_task.setWeight(1.0)
-
-            # only for OMNISTEERING
-            self.posture_cart_task.setWeight(0.)  # in velocity
-
-            # self.posture_arm_task.setRef(self.solution['q'][7:13, :])
-            self.posture_arm_task.setRef(self.solution['q'][15:22, :])  # saving the current position of the arm
-            self.posture_arm_task.setWeight(0.1)
-
-            self.operation_mode = OperationMode.HYBRID
-
-        elif mode == OperationMode.HOMING:
-
-            # activate ee task
-            self.ee_task.setWeight(0.)
-
-            # only for OMNISTEERING
-            self.posture_cart_task.setWeight(1.0)
-
-            self.posture_arm_task.setRef(self.ee_homing_posture)
-            self.posture_arm_task.setWeight(0.004)  # set how fast it goes to homing position
-
-            self.operation_mode = OperationMode.HOMING
-
-        elif mode == OperationMode.IDLE:
-
-            self.ee_task.setWeight(0.0)
-            
-            self.operation_mode = OperationMode.IDLE
-
-        else:
-            raise Exception('Mode not recognized.')
-
-    def getMode(self):
-        return self.operation_mode
 
     def publish_tf(self, ref):
 
@@ -392,6 +286,9 @@ class VirtualMassHandler:
         else:
             raise Exception('Wrong input mode')
 
+
+        print('force sensed: ', self.force_sensed)
+
         # get reference
         self.__integrate(self.solution['q'][:, 0],
                          self.solution['v'][:, 0],
@@ -410,11 +307,6 @@ class VirtualMassHandler:
             # using xy of ee and yaw of base
             self.ee_ref[:self.sys_dim, :] = self.ee_integrated[:self.sys_dim, :]
 
-        if self.operation_mode != OperationMode.IDLE:
-            self.ee_task.setRef(self.ee_ref)
-            if self.__base_yaw_control_flag:
-                self.base_force_task.setRef(self.base_ref)
-            # self.ee_z_task.setRef(self.ee_ref)
-
-        # self.publish_tf(self.ee_ref)
-        # self.publish_marker(self.ee_ref)
+        self.ee_task.setRef(self.ee_ref)
+        if self.__base_yaw_control_flag:
+            self.base_force_task.setRef(self.base_ref)

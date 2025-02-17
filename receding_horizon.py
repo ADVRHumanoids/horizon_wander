@@ -25,7 +25,7 @@ import time
 import horizon.utils as utils
 from cartesian_interface.pyci_all import *
 # from mode_handler import ModeHandler
-# from virtual_mass_handler import VirtualMassHandler
+from virtual_mass_handler import VirtualMassHandler
 from moveit_ros_planning_interface._moveit_roscpp_initializer import roscpp_init
 from scipy.spatial.transform import Rotation as scipy_rot
 import copy
@@ -192,7 +192,7 @@ time_elapsed_solving_list = list()
 time_elapsed_all_list = list()
 time_elapsed_obstacles_list = list()
 
-# vmc = VirtualMassHandler(kin_dyn, solution, ti, input_mode=virtual_mass_input_mode)
+vmc = VirtualMassHandler(kin_dyn, solution, ti, input_mode=virtual_mass_input_mode)
 
 # print(f"robot controller starting in mode: {vmc.getMode()}")
 
@@ -225,7 +225,7 @@ while not rospy.is_shutdown(): #and max_iter < 1000:
     prb.getState().setInitialGuess(xig)
     prb.setInitialState(x0=xig[:, 0])
 
-    # vmc.run(solution)
+    vmc.run(solution)
 
     # if obstacle_avoidance:
     #     tic = time.time()
@@ -236,9 +236,9 @@ while not rospy.is_shutdown(): #and max_iter < 1000:
     tic = time.time()
     ti.rti()
 
-    if max_iter > 40:
-        pos_target = np.array([[1., 0, 0., 0., 0., 0., 0.]])
-        ti.getTask('ee_force').setRef(pos_target.T)
+    # if max_iter > 40:
+    #     pos_target = np.array([[1., 0, 0., 0., 0., 0., 0.]])
+    #     ti.getTask('ee_force').setRef(pos_target.T)
 
     # if obstacle_avoidance:
     
