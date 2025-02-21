@@ -44,6 +44,7 @@ class VirtualMassHandler:
         # ee task
         self.ee_task_name = 'ee_force'
         self.ee_task = ti.getTask(self.ee_task_name)
+        print(self.ee_task)
 
         # ## required for omnisteering
         # # floating base task

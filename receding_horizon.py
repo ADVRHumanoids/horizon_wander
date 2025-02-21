@@ -7,12 +7,12 @@ from horizon.utils import utils
 from horizon.ros import replay_trajectory
 import casadi_kin_dyn.py3casadi_kin_dyn as casadi_kin_dyn
 from std_msgs.msg import ColorRGBA
-from sympy import solve_univariate_inequality
+# from sympy import solve_univariate_inequality
 from xbot_interface import config_options as co
 from visualization_msgs.msg import Marker, MarkerArray
 from xbot_interface import xbot_interface as xbot
 from geometry_msgs.msg import Vector3, TwistStamped
-from kyon_controller.msg import WBTrajectory
+# from kyon_controller.msg import WBTrajectory
 from geometry_msgs.msg import Point, Twist, WrenchStamped, Quaternion
 import casadi as cs
 import rospy
@@ -43,7 +43,7 @@ print(f'input mode: {virtual_mass_input_mode}')
 # if obstacle_avoidance:
     # roscpp_init('concert_obstacles', [])
 
-solution_publisher = rospy.Publisher('/mpc_solution', WBTrajectory, queue_size=1, tcp_nodelay=True)
+# solution_publisher = rospy.Publisher('/mpc_solution', MPCSolution, queue_size=1, tcp_nodelay=True)
 rospy.sleep(1.)
 
 # get from ros param the urdf and srdf
@@ -121,7 +121,7 @@ model = FullModelInverseDynamics(problem=prb,
 
 
 ti = TaskInterface(prb=prb, model=model)
-ti.setTaskFromYaml(rospkg.RosPack().get_path('wander_horizon') + '/config/wander_config.yaml')
+ti.setTaskFromYaml(rospkg.RosPack().get_path('horizon_wander') + '/config/wander_config.yaml')
 
 
 ee_ref = ti.getTask('ee_force').getValues()[:, 0]
