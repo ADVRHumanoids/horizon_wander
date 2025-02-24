@@ -34,7 +34,7 @@ ee_force:
   type: Cartesian
   distal_link: wander_ft_sensor_link
   indices: [0, 1]
-  nodes: 10
+  nodes: all
   weight: *w_e_f
 
 posture_base:
