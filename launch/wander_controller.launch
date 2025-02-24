@@ -17,6 +17,7 @@
     <arg name="rpy" value="'$(arg roll_init_pose) $(arg pitch_init_pose) $(arg yaw_init_pose)'"/>
 
     <arg name="xacro_robot" default="$(find robot_description)/robots/assistive_robot_U_wander.urdf.xacro"/>
+    <arg name="rviz_config_file" default="$(find robot_description)/rviz/horizon_wander_rviz.rviz"/>
     
     <!-- Load Robot description -->
     <param name="robot_description" command="$(find xacro)/xacro $(arg xacro_robot)
@@ -47,5 +48,7 @@
 <!--         <rosparam param="config" file="$(find horizon_navigation)/config/obstacle_generator_config.yaml" ns="concert_obstacles"/> -->
 <!--         <param name="config" textfile="$(find horizon_navigation)/config/obstacle_generator_config.yaml"/> -->
     </node>
+
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg rviz_config_file)"/>
 
 </launch>
