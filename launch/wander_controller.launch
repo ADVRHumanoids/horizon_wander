@@ -12,6 +12,8 @@
     <arg name="pitch_init_pose" default="0"/>
     <arg name="yaw_init_pose" default="0"/>
 
+    <arg name="wrench_topic" value="Bota_LaxOne_ft_handler/wrench"/>
+
     <!-- Set mounting position -->
     <arg name="xyz" value="'$(arg x_init_pose) $(arg y_init_pose) $(arg z_init_pose)'"/>
     <arg name="rpy" value="'$(arg roll_init_pose) $(arg pitch_init_pose) $(arg yaw_init_pose)'"/>
@@ -30,13 +32,6 @@
     <!-- Robot state and joint state publishers -->
 <!--     <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" output="screen"/> -->
 
-    <!-- <node pkg="kyon_controller" type="controller" name="kyon_controller_node" output="screen"> -->
-        <!-- <remap if="$(arg xbot)" from="/robot_description" to="/xbotcore/robot_description"/> -->
-        <!-- <remap if="$(arg xbot)" from="/robot_description_semantic" to="/xbotcore/robot_description_semantic"/> -->
-        <!-- <param name="config" textfile="$(find concert_horizon)/config/concert_controller_config.yaml"/> -->
-        <!-- <param name="rate" value="1000"/> -->
-    <!-- </node> -->
-
     <node pkg="joy" type="joy_node" name="joy_node" if="$(eval arg('input_mode') == 'joystick')">
         <param name="autorepeat_rate" value="20"/>
     </node>
@@ -45,6 +40,8 @@
         <!-- <remap if="$(arg xbot)" from="/robot_description" to="/xbotcore/robot_description"/> -->
         <!-- <remap if="$(arg xbot)" from="/robot_description_semantic" to="/xbotcore/robot_description_semantic"/> -->
         <param name="input_mode" value="$(arg input_mode)" /> <!-- sensor joystick -->
+        <param name="wrench_topic" value="$(arg wrench_topic)"/>
+        <param name="robot_id" value="$(arg namespace)"/>
 <!--         <rosparam param="config" file="$(find horizon_navigation)/config/obstacle_generator_config.yaml" ns="concert_obstacles"/> -->
 <!--         <param name="config" textfile="$(find horizon_navigation)/config/obstacle_generator_config.yaml"/> -->
     </node>

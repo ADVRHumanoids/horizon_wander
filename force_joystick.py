@@ -83,7 +83,6 @@ class ForceJoystick:
 
         xdot = cs.vertcat(v, (F - self.__damp * (v - v0) - self.__spring * (p - p0))/self.__mass)
 
-
         self.integrator = self.__parameteric_RK4(x, F, xdot, p0)
 
     def update(self, x_current, u_current):

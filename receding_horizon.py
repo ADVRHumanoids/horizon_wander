@@ -38,7 +38,11 @@ import math
 rospy.init_node('wander_receding')
 
 virtual_mass_input_mode = rospy.get_param('~input_mode', 'sensor')
+wrench_topic = rospy.get_param('~wrench_topic')
+robot_id = rospy.get_param('~robot_id', 'wander')
+wrench_topic_str = robot_id + "/" + wrench_topic
 print(f'input mode: {virtual_mass_input_mode}')
+print(f'wrench topic: {wrench_topic_str}')
 
 # if obstacle_avoidance:
     # roscpp_init('concert_obstacles', [])
@@ -192,7 +196,7 @@ time_elapsed_solving_list = list()
 time_elapsed_all_list = list()
 time_elapsed_obstacles_list = list()
 
-vmc = VirtualMassHandler(kin_dyn, solution, ti, input_mode=virtual_mass_input_mode)
+vmc = VirtualMassHandler(kin_dyn, solution, ti, wrench_topic_str, input_mode=virtual_mass_input_mode)
 
 # print(f"robot controller starting in mode: {vmc.getMode()}")
 
