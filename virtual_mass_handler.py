@@ -14,14 +14,14 @@ from force_joystick import ForceJoystick
 from joy_commands import JoyForce
 
 class VirtualMassHandler:
-    def __init__(self, kin_dyn, initial_solution, ti: taskInterface, input_mode='joystick'):
+    def __init__(self, kin_dyn, initial_solution, ti: taskInterface, wrench_topic, input_mode='joystick'):
 
         self.kin_dyn = kin_dyn
 
         self.dt = ti.prb.getDt()
         self.ns = ti.prb.getNNodes()
 
-        self.__base_yaw_control_flag = False
+        self.__base_yaw_control_flag = True
 
         # expose this outside
         self.m_virtual = np.array([50, 50, 50]) # 80 80 80 slow but good
@@ -34,6 +34,7 @@ class VirtualMassHandler:
         self.solution = initial_solution
 
         self.force_sensed = None
+        self.wrench_topic = wrench_topic
 
         self.ee_name = 'wander_ft_sensor_link'
         self.__base_link = 'wander_base_link'
@@ -44,7 +45,7 @@ class VirtualMassHandler:
         # ee task
         self.ee_task_name = 'ee_force'
         self.ee_task = ti.getTask(self.ee_task_name)
-        print(self.ee_task)
+        # print("solution", self.solution, "sys_dim", self.sys_dim, "ee_task", self.ee_task)
 
         # ## required for omnisteering
         # # floating base task
@@ -62,7 +63,7 @@ class VirtualMassHandler:
         # get position and linear velocity
         self.ee_initial_pos = copy.copy(self.ee_initial_pose['ee_pos'][:self.sys_dim].full())
         self.ee_initial_vel_lin = copy.copy(self.ee_initial_vel['ee_vel_linear'][:self.sys_dim].full())
-
+        self.ee_initial_vel_ang = copy.copy(self.ee_initial_vel['ee_vel_angular'][:self.sys_dim].full())
 
         if self.__base_yaw_control_flag:
 
@@ -95,7 +96,6 @@ class VirtualMassHandler:
             self.base_ref = self.base_force_task.getValues()
 
         else:
-
             # set initial pose
             self.virtual_mass_controller.setPositionReference(self.ee_initial_pos)
 
@@ -161,7 +161,8 @@ class VirtualMassHandler:
 
     def __init_subscribers(self):
         print('Subscribing to force estimation topic...')
-        rospy.Subscriber('/force_estimation/local', WrenchStamped, self.__wrench_callback)  # /cartesian/force_estimation/ee_E
+        # rospy.Subscriber('/force_estimation/local', WrenchStamped, self.__wrench_callback)  # /cartesian/force_estimation/ee_E
+        rospy.Subscriber(self.wrench_topic, WrenchStamped, self.__wrench_callback)
         print("done.")
 
     def __init_virtual_mass_controller(self):
@@ -179,6 +180,8 @@ class VirtualMassHandler:
 
         # get wrench
         force_sensed = copy.copy(ee_wrench_sensed[:3])
+        # force_sensed = ee_wrench_sensed[1:4]
+        # print('force sensed', force_sensed)
 
         # get current position of the ee on xy
         ee_pose = self.ee_fk_pose_fun(q=q_current)
@@ -191,7 +194,10 @@ class VirtualMassHandler:
         if self.input_mode == 'sensor' and wrench_local_frame:
             # rotate in world from local ee
             ee_rot = ee_pose['ee_rot']
+            
             force_sensed_rot = (ee_rot @ force_sensed)[:self.sys_dim]
+            # print('force sensed rotated', force_sensed_rot)
+            
         else:
             # force in world coordinates from joystick
             force_sensed_rot = force_sensed
@@ -209,13 +215,13 @@ class VirtualMassHandler:
             base_pose = self.base_fk_pose_fun(q=q_current)
             base_vel = self.base_fk_vel_fun(q=q_current, qdot=qdot_current)
 
-
             base_yaw = Rotation.from_matrix(base_pose['ee_rot']).as_euler("xyz")[2]
             base_yaw_vel = base_vel['ee_vel_angular'].full()[2]
 
             # cross product between force sensed (in world) and vector rotated as the base_link
-            force_sensed_rot[2] = np.cross(np.array(base_pose['ee_rot']) @ np.array([[1, 0, 0]]).T, force_sensed_rot.reshape((3, 1)), axis=0)[2]
+            # force_sensed_rot[2] = np.cross(np.array(base_pose['ee_rot']) @ np.array([[1, 0, 0]]).T, force_sensed_rot.reshape((3, 1)), axis=0)[2]
 
+            force_sensed_rot[2] = ee_wrench_sensed[3]
             # using xy of ee and yaw of base
             ee_x_base_yaw = np.zeros([3, 1])
             ee_x_base_yaw[0] = ee_pos[0][0]
@@ -282,7 +288,7 @@ class VirtualMassHandler:
             self.jc.run(self.solution)
             self.force_sensed = self.jc.getForce().T
         elif self.input_mode == 'sensor':
-            self.force_sensed = self.ee_wrench - self.wrench_offset
+            self.force_sensed = self.ee_wrench # - self.wrench_offset
 
         else:
             raise Exception('Wrong input mode')

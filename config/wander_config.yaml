@@ -21,6 +21,7 @@ costs:
   - velocity_regularization
   - acceleration_regularization
   - posture_base # only required if rolling contacts are NOT active
+  - base_force
 
 
 .define:
@@ -29,11 +30,13 @@ costs:
     - &w_e_f 1. # starting with zero weight for ee task
     - &wheel_radius 0.127
     - &w_postural_base 0. # starting with zero weight for base task
+    - &w_e_fb 1. #rotation of the base (fb = floating base)
 
+# Type Cartesian if not specified creates a reference in position 
 ee_force:
   type: Cartesian
   distal_link: wander_ft_sensor_link
-  indices: [0, 1]
+  indices: [0, 1, 2] # x, y, z dell'end effector
   nodes: all
   weight: *w_e_f
 
@@ -44,6 +47,13 @@ posture_base:
   indices: [0, 1, 2, 3, 4, 5]
   cartesian_type: velocity
   weight: *w_postural_base
+
+base_force:
+  type: Cartesian
+  distal_link: wander_base_link 
+  indices: [3, 4, 5] # roll, pitch, yaw della base 
+  nodes: all
+  weight: *w_e_fb
 
 rolling_contact_1:
   type: Rolling
