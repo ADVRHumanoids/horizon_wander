@@ -2,7 +2,7 @@
 
 from std_srvs.srv import SetBool
 import tf2_ros
-from geometry_msgs.msg import TransformStamped, WrenchStamped
+from geometry_msgs.msg import TransformStamped, WrenchStamped, TwistStamped
 from visualization_msgs.msg import Marker
 import rospy
 import numpy as np
@@ -15,6 +15,9 @@ from joy_commands import JoyForce
 
 class VirtualMassHandler:
     def __init__(self, kin_dyn, initial_solution, ti: taskInterface, wrench_topic, input_mode='joystick'):
+
+        self.tfBuffer = tf2_ros.Buffer()
+        self.tfListener = tf2_ros.TransformListener(self.tfBuffer)
 
         self.kin_dyn = kin_dyn
 
@@ -242,6 +245,40 @@ class VirtualMassHandler:
         self.ee_integrated = self.virtual_mass_controller.getIntegratedState()
 
         return self.ee_integrated
+    
+    def twist_transformation(self, twist_frame_A, reference_frame_A, reference_frame_B):
+
+        """
+        transformation of a twist vector from reference frame A (starting reference frame) to twist in reference frame B (ending RF)
+        """ 
+        
+        transformed_twist = TwistStamped()
+        reference_frame_A_T_reference_frame_B = self.tfBuffer.lookup_transform(reference_frame_A, reference_frame_B, rospy.Time(), rospy.Duration(3.0))
+        translation = ([reference_frame_A_T_reference_frame_B.transform.translation.x, reference_frame_A_T_reference_frame_B.transform.translation.y, reference_frame_A_T_reference_frame_B.transform.translation.z])
+        rotation = Rotation.from_quat([reference_frame_A_T_reference_frame_B.transform.rotation.x, reference_frame_A_T_reference_frame_B.transform.rotation.y, 
+                                reference_frame_A_T_reference_frame_B.transform.rotation.z, reference_frame_A_T_reference_frame_B.transform.rotation.w])
+                
+        rotation_matrix = Rotation.as_matrix(rotation)
+        skew_matrix = np.cross(translation, rotation_matrix)
+
+        transform_matrix = np.zeros((6,6))
+        transform_matrix[0:3, 0:3] = transform_matrix[3:, 3:] = rotation_matrix
+        transform_matrix[3:, 0:3] = skew_matrix
+        vector6d = np.array([twist_frame_A.twist.linear.x, twist_frame_A.twist.linear.y, twist_frame_A.twist.linear.z,
+                    twist_frame_A.twist.angular.x, twist_frame_A.twist.angular.y, twist_frame_A.twist.angular.z]).transpose()
+        vector6d = np.reshape(vector6d, (6,1))
+        vel_transformed = np.dot(transform_matrix,vector6d)
+        # vel_transformed = np.matmul(transform_matrix,vector6d)
+        transformed_twist.twist.linear.x = vel_transformed[0]
+        transformed_twist.twist.linear.y = vel_transformed[1]
+        transformed_twist.twist.linear.z = vel_transformed[2]
+        transformed_twist.twist.angular.x = vel_transformed[3]
+        transformed_twist.twist.angular.y = vel_transformed[4]
+        transformed_twist.twist.angular.z = vel_transformed[5]
+        
+        # self.odometry_prev = odom_msg
+        # self.time_prev = time_now
+        return transformed_twist
 
     def publish_tf(self, ref):
 

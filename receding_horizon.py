@@ -13,7 +13,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 from xbot_interface import xbot_interface as xbot
 from geometry_msgs.msg import Vector3, TwistStamped
 # from kyon_controller.msg import WBTrajectory
-from geometry_msgs.msg import Point, Twist, WrenchStamped, Quaternion
+from geometry_msgs.msg import Point, Twist, WrenchStamped, Quaternion, TwistStamped
 import casadi as cs
 import rospy
 import tf
@@ -47,7 +47,7 @@ print(f'wrench topic: {wrench_topic_str}')
 # if obstacle_avoidance:
     # roscpp_init('concert_obstacles', [])
 
-# solution_publisher = rospy.Publisher('/mpc_solution', MPCSolution, queue_size=1, tcp_nodelay=True)
+cmd_velocity_publisher = rospy.Publisher(robot_id + '/robotnik_base_control/cmd_vel', TwistStamped, queue_size=10)
 rospy.sleep(1.)
 
 # get from ros param the urdf and srdf
@@ -75,6 +75,8 @@ prb.setDt(dt)
 
 
 kin_dyn = casadi_kin_dyn.CasadiKinDyn(urdf)
+cmd_velocity_w = TwistStamped()
+cmd_velocity_base = TwistStamped()
 
 # '''
 # Build ModelInterface and RobotStatePublisher
@@ -151,7 +153,7 @@ model.v[3:5].setBounds([0, 0], [0,0]) # the robot cannot pitch and roll
 vel_lin_max_padding = 0.
 vel_ang_max_padding = 0.
 base_vel_lin_max = 0.3
-base_vel_ang_max = 0.3 
+base_vel_ang_max = 0.1 
 
 base_vel_lin_max_padded = base_vel_lin_max - vel_lin_max_padding
 base_vel_ang_max_padded = base_vel_ang_max - vel_ang_max_padding
@@ -209,7 +211,6 @@ iteration = 0
 # fp = ForcePublisher(ti)
 # brp = BaseRefPublisher(ti)
 # vbp = VelBasePublisher(ti)
-
 
 base_fk = kin_dyn.fk('wander_base_link')
 max_iter = 0
@@ -316,6 +317,21 @@ while not rospy.is_shutdown(): #and max_iter < 1000:
     # if robot is None:
         # repl.frame_force_mapping = {cname: solution[f.getName()] for cname, f in ti.model.fmap.items()}
     repl.publish_joints(solution['q'][:, 0])
+    cmd_velocity_w.twist.linear.x = solution['v'][0, 0]
+    cmd_velocity_w.twist.linear.y = solution['v'][1, 0]
+    cmd_velocity_w.twist.angular.z = solution['v'][5, 0]
+    cmd_velocity_base = vmc.twist_transformation(cmd_velocity_w, "world", "wander_base_link")
+
+    # Double check to saturate the velocity 
+    if (cmd_velocity_base.twist.linear.x > base_vel_lin_max ) : cmd_velocity_base.twist.linear.x = base_vel_lin_max
+    if (cmd_velocity_base.twist.linear.y > base_vel_lin_max ) : cmd_velocity_base.twist.linear.y = base_vel_lin_max
+    if (cmd_velocity_base.twist.angular.z > base_vel_ang_max ) : cmd_velocity_base.twist.angular.z = base_vel_ang_max
+
+
+    cmd_velocity_publisher.publish(cmd_velocity_base)
+    print('base vel x: ', cmd_velocity_base.twist.linear.x, 'base vel y: ', cmd_velocity_base.twist.linear.y, 'base ang vel: ', cmd_velocity_base.twist.angular.z)
+    print('world vel x: ', cmd_velocity_w.twist.linear.x, 'world vel y: ', cmd_velocity_w.twist.linear.y, 'world ang vel: ', cmd_velocity_w.twist.angular.z)
+
         # repl.publish_joints(solution['q'][:, ns], prefix='last')
         # repl.publishContactForces(rospy.Time.now(), solution['q'][:, 0], 0)
         # repl.publish_future_trajectory_marker('base_link', solution['q'][0:3, :])
@@ -330,6 +346,6 @@ while not rospy.is_shutdown(): #and max_iter < 1000:
     # print(f"{colorama.Style.RED}MPC loop elapsed time: {time.time() - tic}{colorama.Style.RESET}")
 
 # print(f'average time elapsed shifting: {sum(time_elapsed_shifting_list) / len(time_elapsed_shifting_list)}')
-print(f'average time elapsed solving: {sum(time_elapsed_solving_list) / len(time_elapsed_solving_list)}')
-print(f'average time obstacles: {sum(time_elapsed_obstacles_list) / len(time_elapsed_obstacles_list)}')
-print(f'average time elapsed all: {sum(time_elapsed_all_list) / len(time_elapsed_all_list)}')
+# print(f'average time elapsed solving: {sum(time_elapsed_solving_list) / len(time_elapsed_solving_list)}')
+# print(f'average time obstacles: {sum(time_elapsed_obstacles_list) / len(time_elapsed_obstacles_list)}')
+# print(f'average time elapsed all: {sum(time_elapsed_all_list) / len(time_elapsed_all_list)}')
