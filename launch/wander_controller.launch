@@ -13,6 +13,7 @@
     <arg name="yaw_init_pose" default="0"/>
 
     <arg name="wrench_topic" value="Bota_LaxOne_ft_handler/wrench"/>
+    <arg name="wrench_filtering" default="true"/>
 
     <!-- Set mounting position -->
     <arg name="xyz" value="'$(arg x_init_pose) $(arg y_init_pose) $(arg z_init_pose)'"/>
@@ -36,11 +37,16 @@
         <param name="autorepeat_rate" value="20"/>
     </node>
 
+    <node pkg="horizon_wander" type="reference_traj_creator.py" name="reference_trajectory" output="screen">
+        <param name="robot_id" value="$(arg namespace)" />   
+    </node>
+
     <node pkg="horizon_wander" type="receding_horizon.py" name="mpc_node" output="screen">
         <!-- <remap if="$(arg xbot)" from="/robot_description" to="/xbotcore/robot_description"/> -->
         <!-- <remap if="$(arg xbot)" from="/robot_description_semantic" to="/xbotcore/robot_description_semantic"/> -->
         <param name="input_mode" value="$(arg input_mode)" /> <!-- sensor joystick -->
         <param name="wrench_topic" value="$(arg wrench_topic)"/>
+        <param name="wrench_filtering" value="$(arg wrench_filtering)"/>
         <param name="robot_id" value="$(arg namespace)"/>
 <!--         <rosparam param="config" file="$(find horizon_navigation)/config/obstacle_generator_config.yaml" ns="concert_obstacles"/> -->
 <!--         <param name="config" textfile="$(find horizon_navigation)/config/obstacle_generator_config.yaml"/> -->

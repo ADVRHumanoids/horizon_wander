@@ -12,9 +12,10 @@ from scipy.spatial.transform import Rotation
 
 from force_joystick import ForceJoystick
 from joy_commands import JoyForce
+from force_filtering import ButterworthFilter
 
 class VirtualMassHandler:
-    def __init__(self, kin_dyn, initial_solution, ti: taskInterface, wrench_topic, input_mode='joystick'):
+    def __init__(self, kin_dyn, initial_solution, ti: taskInterface, wrench_topic, wrench_filtering_bool, input_mode='joystick'):
 
         self.tfBuffer = tf2_ros.Buffer()
         self.tfListener = tf2_ros.TransformListener(self.tfBuffer)
@@ -106,6 +107,11 @@ class VirtualMassHandler:
             self.ee_integrated = np.vstack([self.ee_initial_pos, self.ee_initial_vel_lin])
 
         # get reference of ee task force
+        self.wrench_filtering_bool = wrench_filtering_bool
+        self.filtered_force_x = ButterworthFilter(100, 20, 2, 'low', False)
+        self.filtered_force_y = ButterworthFilter(100, 20, 2, 'low', False)
+        self.filtered_force_z = ButterworthFilter(100, 20, 2, 'low', False)
+        self.filtered_torque_x = ButterworthFilter(100, 20, 2, 'low', False)
         self.ee_wrench = np.zeros(6)
         self.ee_ref = self.ee_task.getValues()
         self.ee_ref[3:7, :] = np.array([[0, 0, 0, 1]]).T
@@ -176,8 +182,20 @@ class VirtualMassHandler:
         return ForceJoystick(dt=self.dt, n_step=self.ns, sys_dim=sys_dim, opt=vmass_opt)
 
     def __wrench_callback(self, msg):
-        self.ee_wrench = np.array([msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z,
-                                   msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z])
+
+        if self.wrench_filtering_bool == False : 
+            self.ee_wrench = np.array([msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z,
+                                    msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z])
+        elif self.wrench_filtering_bool == True :
+            filtered_x = self.filtered_force_x.update(msg.wrench.force.x)
+            filtered_y = self.filtered_force_y.update(msg.wrench.force.y)
+            filtered_z = self.filtered_force_z.update(msg.wrench.force.z)
+            filtered_torque = self.filtered_torque_x.update(msg.wrench.torque.x)
+            self.ee_wrench = np.array([filtered_x, filtered_y, filtered_z,
+                                    filtered_torque, msg.wrench.torque.y, msg.wrench.torque.z])
+            
+        print('wrenches values: ', self.ee_wrench)
+            
 
     def __integrate(self, q_current, qdot_current, ee_wrench_sensed, wrench_local_frame=False):
 
@@ -217,6 +235,9 @@ class VirtualMassHandler:
             # get current yaw angle of the base
             base_pose = self.base_fk_pose_fun(q=q_current)
             base_vel = self.base_fk_vel_fun(q=q_current, qdot=qdot_current)
+
+            print('base_pose: ', base_pose)
+            print('base vel: ', base_vel)
 
             base_yaw = Rotation.from_matrix(base_pose['ee_rot']).as_euler("xyz")[2]
             base_yaw_vel = base_vel['ee_vel_angular'].full()[2]
