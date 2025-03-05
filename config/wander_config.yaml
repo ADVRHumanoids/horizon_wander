@@ -37,7 +37,7 @@ ee_force:
   type: Cartesian
   distal_link: wander_ft_sensor_link
   indices: [0, 1, 2] # x, y, z dell'end effector
-  nodes: all
+  nodes: all # [25, 26, 27, ....] oppure $N-5$ 
   weight: *w_e_f
 
 posture_base:
