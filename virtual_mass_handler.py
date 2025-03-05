@@ -2,7 +2,7 @@
 
 from std_srvs.srv import SetBool
 import tf2_ros
-from geometry_msgs.msg import TransformStamped, WrenchStamped, TwistStamped
+from geometry_msgs.msg import TransformStamped, WrenchStamped, TwistStamped, Twist
 from visualization_msgs.msg import Marker
 import rospy
 import numpy as np
@@ -27,9 +27,9 @@ class VirtualMassHandler:
         self.__base_yaw_control_flag = True
 
         # expose this outside
-        self.m_virtual = np.array([50, 50, 50]) # 80 80 80 slow but good
+        self.m_virtual = np.array([90, 90, 0.4*90]) # 80 80 80 slow but good
         self.k_virtual = np.array([0, 0, 0])
-        self.d_virtual = np.array([50, 50, 50]) # 70 70 70 slow but good
+        self.d_virtual = np.array([90, 90, 0.4*90]) # 70 70 70 slow but good
 
         # critical damping
         # 2 * np.sqrt(k_virtual[0] * m_virtual[0]
@@ -224,7 +224,8 @@ class VirtualMassHandler:
             # cross product between force sensed (in world) and vector rotated as the base_link
             # force_sensed_rot[2] = np.cross(np.array(base_pose['ee_rot']) @ np.array([[1, 0, 0]]).T, force_sensed_rot.reshape((3, 1)), axis=0)[2]
 
-            force_sensed_rot[2] = ee_wrench_sensed[3]
+            force_sensed_rot[2] = -ee_wrench_sensed[3] #NB the x-axis of the sensor is oriented opposite direction of the z-axis of the base
+                                                        # Temporary solution with minus sign but the analytical transformation should be implemented
             # using xy of ee and yaw of base
             ee_x_base_yaw = np.zeros([3, 1])
             ee_x_base_yaw[0] = ee_pos[0][0]
@@ -252,7 +253,7 @@ class VirtualMassHandler:
         transformation of a twist vector from reference frame A (starting reference frame) to twist in reference frame B (ending RF)
         """ 
         
-        transformed_twist = TwistStamped()
+        transformed_twist = Twist()
         reference_frame_A_T_reference_frame_B = self.tfBuffer.lookup_transform(reference_frame_A, reference_frame_B, rospy.Time(), rospy.Duration(3.0))
         translation = ([reference_frame_A_T_reference_frame_B.transform.translation.x, reference_frame_A_T_reference_frame_B.transform.translation.y, reference_frame_A_T_reference_frame_B.transform.translation.z])
         rotation = Rotation.from_quat([reference_frame_A_T_reference_frame_B.transform.rotation.x, reference_frame_A_T_reference_frame_B.transform.rotation.y, 
@@ -264,17 +265,17 @@ class VirtualMassHandler:
         transform_matrix = np.zeros((6,6))
         transform_matrix[0:3, 0:3] = transform_matrix[3:, 3:] = rotation_matrix
         transform_matrix[3:, 0:3] = skew_matrix
-        vector6d = np.array([twist_frame_A.twist.linear.x, twist_frame_A.twist.linear.y, twist_frame_A.twist.linear.z,
-                    twist_frame_A.twist.angular.x, twist_frame_A.twist.angular.y, twist_frame_A.twist.angular.z]).transpose()
+        vector6d = np.array([twist_frame_A.linear.x, twist_frame_A.linear.y, twist_frame_A.linear.z,
+                    twist_frame_A.angular.x, twist_frame_A.angular.y, twist_frame_A.angular.z]).transpose()
         vector6d = np.reshape(vector6d, (6,1))
         vel_transformed = np.dot(transform_matrix,vector6d)
         # vel_transformed = np.matmul(transform_matrix,vector6d)
-        transformed_twist.twist.linear.x = vel_transformed[0]
-        transformed_twist.twist.linear.y = vel_transformed[1]
-        transformed_twist.twist.linear.z = vel_transformed[2]
-        transformed_twist.twist.angular.x = vel_transformed[3]
-        transformed_twist.twist.angular.y = vel_transformed[4]
-        transformed_twist.twist.angular.z = vel_transformed[5]
+        transformed_twist.linear.x = vel_transformed[0]
+        transformed_twist.linear.y = vel_transformed[1]
+        transformed_twist.linear.z = vel_transformed[2]
+        transformed_twist.angular.x = vel_transformed[3]
+        transformed_twist.angular.y = vel_transformed[4]
+        transformed_twist.angular.z = vel_transformed[5]
         
         # self.odometry_prev = odom_msg
         # self.time_prev = time_now
