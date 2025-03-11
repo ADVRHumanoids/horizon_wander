@@ -75,6 +75,12 @@ class ButterworthWrenches():
 
         self.b, self.a = signal.butter(order, self.w, 'low')
 
+        # self.zi = signal.lfilter_zi(self.b, self.a)
+
+        # z, _ = signal.lfilter(self.b, self.a, self.FX, zi=self.zi*self.FX[0])
+        # z2, _ = signal.lfilter(b, a, z, zi=self.zi*z[0])
+        # y = signal.filtfilt(b, a, xn)
+
         self.FX = []
         self.FY = []
         self.FZ = []
@@ -98,12 +104,18 @@ class ButterworthWrenches():
         tz = data[5]
 
         self.FX.append(fx)
+        # if len(self.FX) > 500 : self.FX = self.FX[1:]
         self.FY.append(fy)
+        # if len(self.FY) > 500 : self.FY = self.FY[1:]
         self.FZ.append(fz)
+        # if len(self.FZ) > 500 : self.FZ = self.FZ[1:]
 
         self.TX.append(tx)
+        # if len(self.TX) > 500 : self.TX = self.TX[1:]
         self.TY.append(ty)
+        # if len(self.TY) > 500 : self.TY = self.TY[1:]
         self.TZ.append(tz)
+        # if len(self.TZ) > 500 : self.TZ = self.TZ[1:]
 
         fx_low = signal.lfilter(self.b, self.a, self.FX) #Forward filter
         fy_low = signal.lfilter(self.b, self.a, self.FY)
@@ -113,8 +125,15 @@ class ButterworthWrenches():
         ty_low = signal.lfilter(self.b, self.a, self.TY)
         tz_low = signal.lfilter(self.b, self.a, self.TZ)
 
-        filtered_wrenches = np.array([fx_low, fy_low, fz_low, tx_low, ty_low, tz_low])
+        # fx_low = signal.filtfilt(self.b, self.a, self.FX) #Forward filter
+        # fy_low = signal.filtfilt(self.b, self.a, self.FY)
+        # fz_low = signal.filtfilt(self.b, self.a, self.FZ)
 
-        print('Wrenches filtered!!!')
+        # tx_low = signal.filtfilt(self.b, self.a, self.TX)
+        # ty_low = signal.filtfilt(self.b, self.a, self.TY)
+        # tz_low = signal.filtfilt(self.b, self.a, self.TZ)
+
+
+        filtered_wrenches = np.array([fx_low[-1], fy_low[-1], fz_low[-1], tx_low[-1], ty_low[-1], tz_low[-1]])
 
         return filtered_wrenches

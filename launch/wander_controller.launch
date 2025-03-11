@@ -31,7 +31,7 @@
                                             rpy:=$(arg rpy)"/>
 
     <!-- Robot state and joint state publishers -->
-<!--     <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" output="screen"/> -->
+    <!-- <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" output="screen"/> -->
 
     <node pkg="joy" type="joy_node" name="joy_node" if="$(eval arg('input_mode') == 'joystick')">
         <param name="autorepeat_rate" value="20"/>

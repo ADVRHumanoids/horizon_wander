@@ -108,7 +108,9 @@ class VirtualMassHandler:
 
         # get reference of ee task force
         self.wrench_filtering_bool = wrench_filtering_bool
-        self.wrench_filter = ButterworthWrenches(100, 40)
+        if (self.wrench_filtering_bool) : self.filtered_wrenches_publisher = rospy.Publisher('/filtered_wrenches', WrenchStamped, queue_size=10)
+
+        self.wrench_filter = ButterworthWrenches(100, 10)
         self.ee_wrench = np.zeros(6)
         self.ee_ref = self.ee_task.getValues()
         self.ee_ref[3:7, :] = np.array([[0, 0, 0, 1]]).T
@@ -180,11 +182,27 @@ class VirtualMassHandler:
 
     def __wrench_callback(self, msg):
 
+        # self.ee_wrench = np.array([msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z,
+        #                             msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z])
+
         if self.wrench_filtering_bool == False : 
             self.ee_wrench = np.array([msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z,
                                     msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z])
         elif self.wrench_filtering_bool == True :
-            self.ee_wrench = self.wrench_filter.update(self.ee_wrench)
+            self.ee_wrench = self.wrench_filter.update(np.array([msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z,
+                                    msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z]))
+            
+            filtered_wrenches_msg = WrenchStamped()
+
+            filtered_wrenches_msg.wrench.force.x = self.ee_wrench[0]
+            filtered_wrenches_msg.wrench.force.y = self.ee_wrench[1]
+            filtered_wrenches_msg.wrench.force.z = self.ee_wrench[2]
+            filtered_wrenches_msg.wrench.torque.x = self.ee_wrench[3]
+            filtered_wrenches_msg.wrench.torque.y = self.ee_wrench[4] 
+            filtered_wrenches_msg.wrench.torque.z = self.ee_wrench[5] 
+
+            self.filtered_wrenches_publisher.publish(filtered_wrenches_msg)
+        
 
     def __integrate(self, q_current, qdot_current, ee_wrench_sensed, wrench_local_frame=False):
 
