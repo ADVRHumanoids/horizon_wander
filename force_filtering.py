@@ -1,6 +1,6 @@
 # !/usr/bin/env python3
 
-from scipy.signal import butter
+from scipy import signal
 import numpy as np
 
 class ButterworthFilter:
@@ -24,7 +24,7 @@ class ButterworthFilter:
         nyquist = 0.5 * sampling_frequency
         normal_cutoff = cutoff_frequency / nyquist
 
-        self.b, self.a = butter(order, normal_cutoff, btype, analog)
+        self.b, self.a = signal.butter(order, normal_cutoff, btype, analog)
         # print('x_s: ', self.b, 'y_s: ', self.a)
         # self._xs = deque([0] * len(self.b), maxlen=len(self.b))
         # self._ys = deque([0] * (len(self.a) - 1), maxlen=len(self.a)-1)
@@ -58,3 +58,63 @@ class ButterworthFilter:
             self.filtered_buffer_x[1] =  self.filtered_buffer_x[0]
 
         return self.filtered_buffer_x[0]
+    
+class ButterworthWrenches():
+    def __init__(self, sampling_frequency, cutoff_frequency, order = 2, btype = 'low', analog = False): 
+        """
+        Filter parameters
+
+        - cutoff_frequency = Cut-off frequency of the low-pass filter (Hz)
+        - order = Order of the Butterworth filter
+        - b, a : ndarray, ndarray. Numerator (`b`) and denominator (`a`) polynomials of the IIR filter.
+        """              
+        self.fs = sampling_frequency #sampling frequency
+
+        self.fc = cutoff_frequency # Cut-off frequency of the filter
+        self.w = self.fc / (self.fs / 2) # Normalize the frequency
+
+        self.b, self.a = signal.butter(order, self.w, 'low')
+
+        self.FX = []
+        self.FY = []
+        self.FZ = []
+
+        self.TX = []
+        self.TY = []
+        self.TZ = []
+
+        self.filtered_data_x = []
+        self.filtered_data_y = []
+        self.sample_data_x = []
+        self.sample_data_y = []
+    
+    def update(self, data):
+
+        fx = data[0]
+        fy = data[1]
+        fz = data[2]
+        tx = data[3]
+        ty = data[4]
+        tz = data[5]
+
+        self.FX.append(fx)
+        self.FY.append(fy)
+        self.FZ.append(fz)
+
+        self.TX.append(tx)
+        self.TY.append(ty)
+        self.TZ.append(tz)
+
+        fx_low = signal.lfilter(self.b, self.a, self.FX) #Forward filter
+        fy_low = signal.lfilter(self.b, self.a, self.FY)
+        fz_low = signal.lfilter(self.b, self.a, self.FZ)
+
+        tx_low = signal.lfilter(self.b, self.a, self.TX)
+        ty_low = signal.lfilter(self.b, self.a, self.TY)
+        tz_low = signal.lfilter(self.b, self.a, self.TZ)
+
+        filtered_wrenches = np.array([fx_low, fy_low, fz_low, tx_low, ty_low, tz_low])
+
+        print('Wrenches filtered!!!')
+
+        return filtered_wrenches
