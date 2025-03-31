@@ -3,8 +3,12 @@
 from scipy import signal
 import numpy as np
 
-class ButterworthFilter:
 
+class ButterworthFilter:
+    """
+        Implemented in our lab
+    """  
+    
     def __init__(self, sampling_frequency, cutoff_frequency, order, btype, analog): 
         """
         Filter parameters
@@ -60,6 +64,9 @@ class ButterworthFilter:
         return self.filtered_buffer_x[0]
     
 class ButterworthWrenches():
+    """
+        Repo ros online
+    """  
     def __init__(self, sampling_frequency, cutoff_frequency, order = 2, btype = 'low', analog = False): 
         """
         Filter parameters

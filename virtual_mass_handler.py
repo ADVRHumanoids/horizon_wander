@@ -9,6 +9,7 @@ import numpy as np
 import copy
 from horizon.rhc import taskInterface
 from scipy.spatial.transform import Rotation
+from nav_msgs.msg import Path
 
 from force_joystick import ForceJoystick
 from joy_commands import JoyForce
@@ -19,6 +20,13 @@ class VirtualMassHandler:
 
         self.tfBuffer = tf2_ros.Buffer()
         self.tfListener = tf2_ros.TransformListener(self.tfBuffer)
+        self.predicted_path_lstm = Path()
+
+        # self.MPC_gain =  np.linspace(0, 1, 51)
+        # self.LSTM_gain = np.linspace(1, 0, 51)
+
+        self.MPC_gain = np.ones(51)
+        self.LSTM_gain = np.zeros(51)
 
         self.kin_dyn = kin_dyn
 
@@ -28,9 +36,9 @@ class VirtualMassHandler:
         self.__base_yaw_control_flag = True
 
         # expose this outside
-        self.m_virtual = np.array([90, 90, 0.4*90]) # 80 80 80 slow but good
+        self.m_virtual = np.array([80, 80, 0.4*80]) # 80 80 80 slow but good
         self.k_virtual = np.array([0, 0, 0])
-        self.d_virtual = np.array([90, 90, 0.4*90]) # 70 70 70 slow but good
+        self.d_virtual = np.array([70, 70, 0.4*70]) # 70 70 70 slow but good
 
         # critical damping
         # 2 * np.sqrt(k_virtual[0] * m_virtual[0]
@@ -108,9 +116,16 @@ class VirtualMassHandler:
 
         # get reference of ee task force
         self.wrench_filtering_bool = wrench_filtering_bool
-        if (self.wrench_filtering_bool) : self.filtered_wrenches_publisher = rospy.Publisher('/filtered_wrenches', WrenchStamped, queue_size=10)
-
-        self.wrench_filter = ButterworthWrenches(100, 10)
+        # if (self.wrench_filtering_bool) : self.filtered_wrenches_publisher = rospy.Publisher('/filtered_wrenches', WrenchStamped, queue_size=10)
+        self.filtered_wrenches_publisher = rospy.Publisher('/filtered_wrenches', WrenchStamped, queue_size=10)
+        dt = 132 / 6601
+        sampling_frequency = 1/dt
+        cutoff_frequency = 1
+        order = 2
+        btype = 'low'
+        analog = False
+        
+        self.wrench_filter = ButterworthWrenches(sampling_frequency, cutoff_frequency, order, btype, analog)
         self.ee_wrench = np.zeros(6)
         self.ee_ref = self.ee_task.getValues()
         self.ee_ref[3:7, :] = np.array([[0, 0, 0, 1]]).T
@@ -171,6 +186,7 @@ class VirtualMassHandler:
         print('Subscribing to force estimation topic...')
         # rospy.Subscriber('/force_estimation/local', WrenchStamped, self.__wrench_callback)  # /cartesian/force_estimation/ee_E
         rospy.Subscriber(self.wrench_topic, WrenchStamped, self.__wrench_callback)
+        rospy.Subscriber('/wander/predicted_trajectory_LSTM', Path, self.__LSTM_path_callback)
         print("done.")
 
     def __init_virtual_mass_controller(self):
@@ -180,28 +196,32 @@ class VirtualMassHandler:
         vmass_opt = dict(mass=self.m_virtual, damp=self.d_virtual, spring=self.k_virtual)
         return ForceJoystick(dt=self.dt, n_step=self.ns, sys_dim=sys_dim, opt=vmass_opt)
 
+    def __LSTM_path_callback(self, msg):
+
+        self.predicted_path_lstm = msg
+
     def __wrench_callback(self, msg):
 
         # self.ee_wrench = np.array([msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z,
         #                             msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z])
 
-        if self.wrench_filtering_bool == False : 
-            self.ee_wrench = np.array([msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z,
-                                    msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z])
-        elif self.wrench_filtering_bool == True :
-            self.ee_wrench = self.wrench_filter.update(np.array([msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z,
-                                    msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z]))
-            
-            filtered_wrenches_msg = WrenchStamped()
+        # if self.wrench_filtering_bool == False : 
+        self.ee_wrench = np.array([msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z,
+                                msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z])
+        # elif self.wrench_filtering_bool == True :
+        self.ee_wrench_filtered = self.wrench_filter.update(np.array([msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z,
+                                msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z]))
+        
+        filtered_wrenches_msg = WrenchStamped()
 
-            filtered_wrenches_msg.wrench.force.x = self.ee_wrench[0]
-            filtered_wrenches_msg.wrench.force.y = self.ee_wrench[1]
-            filtered_wrenches_msg.wrench.force.z = self.ee_wrench[2]
-            filtered_wrenches_msg.wrench.torque.x = self.ee_wrench[3]
-            filtered_wrenches_msg.wrench.torque.y = self.ee_wrench[4] 
-            filtered_wrenches_msg.wrench.torque.z = self.ee_wrench[5] 
+        filtered_wrenches_msg.wrench.force.x = self.ee_wrench_filtered[0]
+        filtered_wrenches_msg.wrench.force.y = self.ee_wrench_filtered[1]
+        filtered_wrenches_msg.wrench.force.z = self.ee_wrench_filtered[2]
+        filtered_wrenches_msg.wrench.torque.x = self.ee_wrench_filtered[3]
+        filtered_wrenches_msg.wrench.torque.y = self.ee_wrench_filtered[4] 
+        filtered_wrenches_msg.wrench.torque.z = self.ee_wrench_filtered[5] 
 
-            self.filtered_wrenches_publisher.publish(filtered_wrenches_msg)
+        self.filtered_wrenches_publisher.publish(filtered_wrenches_msg)
         
 
     def __integrate(self, q_current, qdot_current, ee_wrench_sensed, wrench_local_frame=False):
@@ -265,14 +285,20 @@ class VirtualMassHandler:
             ee_x_base_yaw_vel[1] = ee_vel_lin[1][0]
             ee_x_base_yaw_vel[2] = base_yaw_vel
 
-            self.virtual_mass_controller.update(np.vstack([ee_x_base_yaw, ee_x_base_yaw_vel]), force_sensed_rot[:self.sys_dim])
+            # self.virtual_mass_controller.update(np.vstack([ee_x_base_yaw, ee_x_base_yaw_vel]), force_sensed_rot[:self.sys_dim]) # Com'era prima
+            self.virtual_mass_controller.update(self.ee_integrated[:, 0], force_sensed_rot[:self.sys_dim]) # Con la modifica che mi hai mandato 
 
         else:
             # using xyz of ee
             self.virtual_mass_controller.update(np.vstack([ee_pos, ee_vel_lin]), force_sensed_rot[:self.sys_dim])
 
-        self.ee_integrated = self.virtual_mass_controller.getIntegratedState()
+        # Da considerare come modifica per risolvere il problema del drift
+        # if (self.__closed_integrated_state):
+        #     self.virtual_mass_controller.update(self.ee_integrated[:, 0], force_sensed_rot[:self.sys_dim])
+        # else:
+        #     self.virtual_mass_controller.update(np.vstack([ee_pos, ee_vel_lin]), force_sensed[:self.sys_dim])
 
+        self.ee_integrated = self.virtual_mass_controller.getIntegratedState()
         return self.ee_integrated
     
     def twist_transformation(self, twist_frame_A, reference_frame_A, reference_frame_B):
@@ -367,15 +393,24 @@ class VirtualMassHandler:
                          self.solution['v'][:, 0],
                          self.force_sensed,
                          wrench_local_frame=True)
+ 
+        self.ee_ref[:2, :] = self.ee_integrated[:2, :] # We set the reference for x,y --> self.ee_ref[:2, :] = (2, num_nodes_horizon)
+        
+        # --- Here we can add the inference of LSTM predicted path ---
 
-        self.ee_ref[:2, :] = self.ee_integrated[:2, :]
+        # ee_ref_LSTM = np.zeros((2, self.ee_ref[:2, :].shape[1]))  # Matrice 2xN
 
+        # for i, pose in enumerate(self.predicted_path_lstm.poses):
+        #     ee_ref_LSTM[0, i] = pose.pose.position.x  
+        #     ee_ref_LSTM[1, i] = pose.pose.position.y  
+        
+        # self.ee_ref[0, :] = (self.MPC_gain * self.ee_ref[0, :] + self.LSTM_gain * ee_ref_LSTM[0, :]) / (self.MPC_gain + self.LSTM_gain)
+        # self.ee_ref[1, :] = (self.MPC_gain * self.ee_ref[1, :] + self.LSTM_gain * ee_ref_LSTM[1, :]) / (self.MPC_gain + self.LSTM_gain)
+
+        # We set the reference for the yaw
         if self.__base_yaw_control_flag:
             # using xyz of ee
-
-
             self.base_ref[3:7, :] = Rotation.from_euler('z', self.ee_integrated[2, :]).as_quat().T
-
         else:
             # using xy of ee and yaw of base
             self.ee_ref[:self.sys_dim, :] = self.ee_integrated[:self.sys_dim, :]

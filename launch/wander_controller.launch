@@ -31,15 +31,15 @@
                                             rpy:=$(arg rpy)"/>
 
     <!-- Robot state and joint state publishers -->
-    <!-- <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" output="screen"/> -->
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" output="screen"/>
 
     <node pkg="joy" type="joy_node" name="joy_node" if="$(eval arg('input_mode') == 'joystick')">
         <param name="autorepeat_rate" value="20"/>
     </node>
 
-    <node pkg="horizon_wander" type="reference_traj_creator.py" name="reference_trajectory" output="screen">
+    <!-- <node pkg="horizon_wander" type="reference_traj_creator.py" name="reference_trajectory" output="screen">
         <param name="robot_id" value="$(arg namespace)" />   
-    </node>
+    </node> -->
 
     <node pkg="horizon_wander" type="receding_horizon.py" name="mpc_node" output="screen">
         <!-- <remap if="$(arg xbot)" from="/robot_description" to="/xbotcore/robot_description"/> -->

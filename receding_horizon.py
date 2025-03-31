@@ -49,7 +49,7 @@ print(f'wrench_filtering: {wrench_filtering_bool}')
 # if obstacle_avoidance:
     # roscpp_init('concert_obstacles', [])
 
-cmd_velocity_publisher = rospy.Publisher(robot_id + '/cmd_vel', Twist, queue_size=10)
+cmd_velocity_publisher = rospy.Publisher(robot_id + '/robotnik_base_control/cmd_vel', Twist, queue_size=10)
 rospy.sleep(1.)
 
 # get from ros param the urdf and srdf
@@ -68,7 +68,7 @@ file_dir = os.getcwd()
 '''
 Initialize Horizon problem
 '''
-ns = 30
+ns = 25
 T = 1.5
 dt = T / ns
 
@@ -118,8 +118,8 @@ init_pos_wheel = FK(q=kin_dyn.mapToQ(q_init))['ee_pos']
 base_init[2] = -init_pos_wheel[2] + wheel_radius
 
 
-robot_state_pub_command = 'rosrun robot_state_publisher robot_state_publisher robot_description:=robot_description'
-robot_state_pub_process = subprocess.Popen(robot_state_pub_command.split(), start_new_session=True)
+# robot_state_pub_command = 'rosrun robot_state_publisher robot_state_publisher robot_description:=robot_description'
+# robot_state_pub_process = subprocess.Popen(robot_state_pub_command.split(), start_new_session=True)
 
 model = FullModelInverseDynamics(problem=prb,
                                  kd=kin_dyn,
@@ -325,14 +325,13 @@ while not rospy.is_shutdown(): #and max_iter < 1000:
     cmd_velocity_base = vmc.twist_transformation(cmd_velocity_w, "world", "wander_base_link")
 
     # Double check to saturate the velocity 
-    if (cmd_velocity_base.linear.x > base_vel_lin_max ) : cmd_velocity_base.linear.x = base_vel_lin_max
-    if (cmd_velocity_base.linear.y > base_vel_lin_max ) : cmd_velocity_base.linear.y = base_vel_lin_max
-    if (cmd_velocity_base.angular.z > base_vel_ang_max ) : cmd_velocity_base.angular.z = base_vel_ang_max
+    # if (cmd_velocity_base.linear.x > base_vel_lin_max ) : cmd_velocity_base.linear.x = base_vel_lin_max
+    # if (cmd_velocity_base.linear.y > base_vel_lin_max ) : cmd_velocity_base.linear.y = base_vel_lin_max
+    # if (cmd_velocity_base.angular.z > base_vel_ang_max ) : cmd_velocity_base.angular.z = base_vel_ang_max
 
 
     cmd_velocity_publisher.publish(cmd_velocity_base)
-    print('base vel x: ', cmd_velocity_base.linear.x, 'base vel y: ', cmd_velocity_base.linear.y, 'base ang vel: ', cmd_velocity_base.angular.z)
-    print('world vel x: ', cmd_velocity_w.linear.x, 'world vel y: ', cmd_velocity_w.linear.y, 'world ang vel: ', cmd_velocity_w.angular.z)
+    # print('base vel x: ', cmd_velocity_base.linear.x, 'base vel y: ', cmd_velocity_base.linear.y, 'base ang vel: ', cmd_velocity_base.angular.z)
 
         # repl.publish_joints(solution['q'][:, ns], prefix='last')
         # repl.publishContactForces(rospy.Time.now(), solution['q'][:, 0], 0)
